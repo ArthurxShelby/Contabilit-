@@ -14,10 +14,9 @@ st.set_page_config(
 
 
 def check_password():
-  """Restituisce True se l'utente ha inserito la password correta."""
+  """Restituisce True se l'utente ha inserito la password corretta."""
 
   def password_entered():
-    # Controlla la password esclusivamente dai segreti configurati
     if (
         "APP_PASSWORD" in st.secrets
         and st.session_state["password_input"] == st.secrets["APP_PASSWORD"]
@@ -212,8 +211,10 @@ if menu == "Aggiungi Transazione":
     )
     esercente = st.text_input("Esercente / Beneficiario")
     categoria = st.text_input("Categoria (es. Spesa, Ristorante, Stipendio)")
-    scontrino = st.checkbox(
-        "Scontrino conservato?", value=True if tipo == "Uscita" else False
+
+    scontrino_checkbox = st.checkbox(
+        "Scontrino conservato (cartaceo)?",
+        value=True if tipo == "Uscita" else False,
     )
 
     submit = st.form_submit_button("Salva Transazione")
@@ -229,11 +230,23 @@ if menu == "Aggiungi Transazione":
               importo,
               esercente,
               categoria,
-              1 if scontrino else 0,
+              1 if scontrino_checkbox else 0,
           )
           st.success("Transazione salvata con successo su Supabase!")
         except Exception as e:
           st.error(f"Errore durante il salvataggio: {e}")
+
+  # Sezione fotocamera per scattare lo scontrino direttamente da smartphone
+  st.markdown("---")
+  st.subheader("📷 Scatta o Carica Foto Scontrino")
+  foto_scontrino = st.camera_input(
+      "Uusa la fotocamera del telefono per immortalare lo scontrino"
+  )
+  if foto_scontrino is not None:
+    st.success(
+        "Foto dello scontrino acquisita correttamente dal dispositivo!"
+    )
+    # Eventuale logica futura per caricare l'immagine su Supabase Storage
 
 elif menu == "Visualizza e Riconcilia":
   st.subheader("Elenco Transazioni e Riconciliazione Mensile")
