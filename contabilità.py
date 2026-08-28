@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 import io
+import base64
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -64,7 +65,7 @@ supabase: Client = init_supabase()
 
 
 def aggiungi_transazione(
-    data, tipo, importo, esercente, categoria, scontrino_conservato, url_scontrino=None
+    data, tipo, importo, esercente, categoria, scontrino_conservato, base64_scontrino=None
 ):
   valore = float(Decimal(str(importo)).quantize(Decimal("0.01")))
   dati_inserimento = {
@@ -74,7 +75,7 @@ def aggiungi_transazione(
       "esercente": esercente,
       "categoria": categoria,
       "scontrino_conservato": 1 if scontrino_conservato else 0,
-      "url_scontrino": url_scontrino,
+      "url_scontrino": base64_scontrino,  # Utilizziamo questa colonna per salvare la stringa base64
   }
   response = supabase.table("transazioni").insert(dati_inserimento).execute()
   return response
@@ -215,7 +216,6 @@ if menu == "Aggiungi Transazione":
 
     submit = st.form_submit_button("Salva Transazione")
 
-    # Gestione fotocamera opzionale all'interno della stessa schermata
   st.markdown("---")
   st.subheader("📷 Acquisizione Fotografica Scontrino (Opzionale)")
   attiva_camera = st.toggle("Attiva fotocamera per scattare lo scontrino")
@@ -231,18 +231,11 @@ if menu == "Aggiungi Transazione":
       st.warning("Inserisci il nome dell'esercente.")
     else:
       try:
-        url_file = None
-        # Se è stata scattata una foto, la carichiamo nel bucket Storage di Supabase
+        stringa_base64 = None
         if foto_scontrino is not None:
-          file_bytes = foto_scontrino.getvalue()
-          file_name = f"scontrino_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-          # Assicurati di avere un bucket Supabase chiamato 'scontrini'
-          supabase.storage.from_("scontrini").upload(
-              file_name, file_bytes, {"content-type": "image/jpeg"}
-          )
-          url_file = supabase.storage.from_("scontrini").get_public_url(
-              file_name
-          )
+          # Convertiamo l'immagine scattata in stringa Base64 per salvarla direttamente nel DB
+          bytes_immagine = foto_scontrino.getvalue()
+          stringa_base64 = base64.b64encode(bytes_immagine).decode("utf-8")
 
         aggiungi_transazione(
             str(data),
@@ -251,7 +244,7 @@ if menu == "Aggiungi Transazione":
             esercente,
             categoria,
             1 if (scontrino_checkbox or foto_scontrino is not None) else 0,
-            url_file,
+            stringa_base64,
         )
         st.success(
             "Transazione e scontrino salvati con successo su Supabase!"
@@ -355,7 +348,6 @@ elif menu == "Visualizza e Riconcilia":
     if dati_tabella:
       st.dataframe(dati_tabella, use_container_width=True)
 
-      # Sezione interattiva per visualizzare lo scontrino associato o eliminare la transazione
       st.markdown("#### 🔍 Gestione Scontrino e Transazione")
       opzioni_gestione = {
           f"ID {t['id']} - {t['data']} - {t['tipo']} - € {t['importo']} - {t['esercente']}": t
@@ -369,13 +361,17 @@ elif menu == "Visualizza e Riconcilia":
         )
         transazione_selezionata = opzioni_gestione[voce_selezionata]
 
-        # Mostra lo scontrino associato se presente
-        url_scontrino = transazione_selezionata.get("url_scontrino")
-        if url_scontrino:
+        # Decodifica ed esposizione dello scontrino salvato in base64
+        dati_b64 = transazione_selezionata.get("url_scontrino")
+        if dati_b64:
           st.success("📄 Scontrino fotografico disponibile per questa transazione:")
-          st.image(url_scontrino, caption=f"Scontrino - {transazione_selezionata['esercente']}", width=400)
+          try:
+            binario_immagine = base64.b64decode(dati_b64)
+            st.image(binario_immagine, caption=f"Scontrino - {transazione_selezionata['esercente']}", width=400)
+          except Exception:
+            st.error("Impossibile decodificare l'immagine salvata.")
         else:
-          st.info("ℹ️ Nessuna foto scontrino associata a questa transazione (registrata solo come cartacea o assente).")
+          st.info("ℹ️ Nessuna foto scontrino associata a questa transazione.")
 
         if st.button("Elimina Transazione Selezionata", type="primary"):
           id_da_eliminare = transazione_selezionata["id"]
