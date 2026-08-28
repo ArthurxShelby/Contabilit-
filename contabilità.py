@@ -64,12 +64,9 @@ supabase: Client = init_supabase()
 
 
 def aggiungi_transazione(
-    data, tipo, importo, esercente, categoria, scontrino_conservato, foto_bytes=None
+    data, tipo, importo, esercente, categoria, scontrino_conservato, url_scontrino=None
 ):
   valore = float(Decimal(str(importo)).quantize(Decimal("0.01")))
-  
-  # Nota: se decidi di salvare l'immagine su Supabase Storage, qui puoi caricarla 
-  # e salvare il link nel campo 'nota_scontrino' o in una colonna dedicata.
   dati_inserimento = {
       "data": data,
       "tipo": tipo.upper(),
@@ -77,8 +74,8 @@ def aggiungi_transazione(
       "esercente": esercente,
       "categoria": categoria,
       "scontrino_conservato": 1 if scontrino_conservato else 0,
+      "url_scontrino": url_scontrino,
   }
-  
   response = supabase.table("transazioni").insert(dati_inserimento).execute()
   return response
 
@@ -218,34 +215,49 @@ if menu == "Aggiungi Transazione":
 
     submit = st.form_submit_button("Salva Transazione")
 
-    if submit:
-      if esercente.strip() == "":
-        st.warning("Inserisci il nome dell'esercente.")
-      else:
-        try:
-          aggiungi_transazione(
-              str(data),
-              tipo.upper(),
-              importo,
-              esercente,
-              categoria,
-              1 if scontrino_checkbox else 0,
-          )
-          st.success("Transazione salvata con successo su Supabase!")
-        except Exception as e:
-          st.error(f"Errore durante il salvataggio: {e}")
-
-  # Controllo condizionale per attivare la fotocamera solo su richiesta esplicita
+    # Gestione fotocamera opzionale all'interno della stessa schermata
   st.markdown("---")
-  st.subheader("📷 Acquisizione Fotografica Scontrino")
-  
+  st.subheader("📷 Acquisizione Fotografica Scontrino (Opzionale)")
   attiva_camera = st.toggle("Attiva fotocamera per scattare lo scontrino")
-  
+  foto_scontrino = None
+
   if attiva_camera:
-    foto_scontrino = st.camera_input("Inquadra lo scontrino e scatta")
+    foto_scontrino = st.camera_input("Inquadra lo scontrino")
     if foto_scontrino is not None:
-      st.image(foto_scontrino, caption="Anteprima Scontrino Scattato", width=300)
-      st.success("Foto pronta! (Puoi procedere al salvataggio della transazione sopra inserendo i dati).")
+      st.image(foto_scontrino, caption="Anteprima Scontrino", width=300)
+
+  if submit:
+    if esercente.strip() == "":
+      st.warning("Inserisci il nome dell'esercente.")
+    else:
+      try:
+        url_file = None
+        # Se è stata scattata una foto, la carichiamo nel bucket Storage di Supabase
+        if foto_scontrino is not None:
+          file_bytes = foto_scontrino.getvalue()
+          file_name = f"scontrino_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+          # Assicurati di avere un bucket Supabase chiamato 'scontrini'
+          supabase.storage.from_("scontrini").upload(
+              file_name, file_bytes, {"content-type": "image/jpeg"}
+          )
+          url_file = supabase.storage.from_("scontrini").get_public_url(
+              file_name
+          )
+
+        aggiungi_transazione(
+            str(data),
+            tipo.upper(),
+            importo,
+            esercente,
+            categoria,
+            1 if (scontrino_checkbox or foto_scontrino is not None) else 0,
+            url_file,
+        )
+        st.success(
+            "Transazione e scontrino salvati con successo su Supabase!"
+        )
+      except Exception as e:
+        st.error(f"Errore durante il salvataggio: {e}")
 
 elif menu == "Visualizza e Riconcilia":
   st.subheader("Elenco Transazioni e Riconciliazione Mensile")
@@ -339,26 +351,34 @@ elif menu == "Visualizza e Riconcilia":
     elif dati_tabella:
       st.success("Tutte le uscite di questo mese hanno uno scontrino abbinato!")
 
-    st.markdown("### Dettaglio Transazioni del Mese")
+    st.markdown("### Dettaglio Transazioni e Scontrini del Mese")
     if dati_tabella:
       st.dataframe(dati_tabella, use_container_width=True)
 
-      st.markdown("#### 🗑️ Gestione / Elimina Transazione")
-      opzioni_elimina = {
-          f"ID {t['id']} - {t['data']} - {t['tipo']} - € {t['importo']} - {t['esercente']}": t[
-              "id"
-          ]
+      # Sezione interattiva per visualizzare lo scontrino associato o eliminare la transazione
+      st.markdown("#### 🔍 Gestione Scontrino e Transazione")
+      opzioni_gestione = {
+          f"ID {t['id']} - {t['data']} - {t['tipo']} - € {t['importo']} - {t['esercente']}": t
           for t in transazioni_filtrate
       }
 
-      if opzioni_elimina:
+      if opzioni_gestione:
         voce_selezionata = st.selectbox(
-            "Seleziona la transazione da gestire/eliminare",
-            options=list(opzioni_elimina.keys()),
+            "Seleziona la transazione da esaminare",
+            options=list(opzioni_gestione.keys()),
         )
+        transazione_selezionata = opzioni_gestione[voce_selezionata]
+
+        # Mostra lo scontrino associato se presente
+        url_scontrino = transazione_selezionata.get("url_scontrino")
+        if url_scontrino:
+          st.success("📄 Scontrino fotografico disponibile per questa transazione:")
+          st.image(url_scontrino, caption=f"Scontrino - {transazione_selezionata['esercente']}", width=400)
+        else:
+          st.info("ℹ️ Nessuna foto scontrino associata a questa transazione (registrata solo come cartacea o assente).")
 
         if st.button("Elimina Transazione Selezionata", type="primary"):
-          id_da_eliminare = opzioni_elimina[voce_selezionata]
+          id_da_eliminare = transazione_selezionata["id"]
           try:
             elimina_transazione(id_da_eliminare)
             st.success("Transazione eliminata con successo!")
