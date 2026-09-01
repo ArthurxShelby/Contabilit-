@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetimefrom datetime import datetime
 from decimal import Decimal
 import io
 import base64
@@ -75,9 +75,22 @@ def aggiungi_transazione(
       "esercente": esercente,
       "categoria": categoria,
       "scontrino_conservato": 1 if scontrino_conservato else 0,
-      "url_scontrino": base64_scontrino,  # Utilizziamo questa colonna per salvare la stringa base64
+      "url_scontrino": base64_scontrino,
   }
   response = supabase.table("transazioni").insert(dati_inserimento).execute()
+  return response
+
+
+def aggiorna_scontrino_transazione(id_transazione, base64_scontrino):
+  response = (
+      supabase.table("transazioni")
+      .update({
+          "scontrino_conservato": 1,
+          "url_scontrino": base64_scontrino,
+      })
+      .eq("id", id_transazione)
+      .execute()
+  )
   return response
 
 
@@ -233,7 +246,6 @@ if menu == "Aggiungi Transazione":
       try:
         stringa_base64 = None
         if foto_scontrino is not None:
-          # Convertiamo l'immagine scattata in stringa Base64 per salvarla direttamente nel DB
           bytes_immagine = foto_scontrino.getvalue()
           stringa_base64 = base64.b64encode(bytes_immagine).decode("utf-8")
 
@@ -372,6 +384,25 @@ elif menu == "Visualizza e Riconcilia":
             st.error("Impossibile decodificare l'immagine salvata.")
         else:
           st.info("ℹ️ Nessuna foto scontrino associata a questa transazione.")
+
+        # Integrazione del bottone / fotocamera per acquisire e associare lo scontrino
+        st.markdown("##### 📷 Aggiungi o Aggiorna Foto Scontrino")
+        attiva_camera_rec = st.toggle("Attiva fotocamera per questo scontrino", key=f"cam_{transazione_selezionata['id']}")
+        foto_scontrino_rec = None
+
+        if attiva_camera_rec:
+          foto_scontrino_rec = st.camera_input("Inquadra lo scontrino da associare", key=f"cam_input_{transazione_selezionata['id']}")
+          if foto_scontrino_rec is not None:
+            st.image(foto_scontrino_rec, caption="Nuova Anteprima Scontrino", width=300)
+            if st.button("Salva Foto per questa Transazione", key=f"save_photo_{transazione_selezionata['id']}"):
+              try:
+                bytes_img = foto_scontrino_rec.getvalue()
+                str_b64 = base64.b64encode(bytes_img).decode("utf-8")
+                aggiorna_scontrino_transazione(transazione_selezionata["id"], str_b64)
+                st.success("Scontrino associato e salvato con successo!")
+                st.rerun()
+              except Exception as e:
+                st.error(f"Errore durante l'aggiornamento dello scontrino: {e}")
 
         if st.button("Elimina Transazione Selezionata", type="primary"):
           id_da_eliminare = transazione_selezionata["id"]
