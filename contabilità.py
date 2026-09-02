@@ -554,6 +554,8 @@ with st.expander("📈 Analisi Grafica e Dettaglio Uscite per Metrica", expanded
                 titolo_totali = "Totale Intero Periodo"
 
             st.markdown(f"#### 📊 {titolo_totali}")
+
+            st.write("DEBUG - Numero uscite calcolato:", num_uscite_periodo)
             
             # Utilizziamo 4 colonne con pesi uguali definiti esplicitamente
             col_tot1, col_tot2, col_tot3, col_tot4 = st.columns([1, 1, 1, 1])
