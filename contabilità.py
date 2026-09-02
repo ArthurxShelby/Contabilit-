@@ -73,7 +73,6 @@ if resp_global.status_code == 200:
         st.markdown("---")
         st.subheader("📊 Statistiche Dinamiche e Riepilogo (TCR - Dal 15/11/2025)")
         
-        # Suddividiamo in 4 colonne per mantenere pulito lo spazio tra metriche e immagine
         col_m1, col_m2, col_m3, col_img = st.columns([2, 2, 2, 3])
         
         with col_m1:
@@ -247,7 +246,6 @@ with st.expander("🔍 Esplora Archivio Storico da Intervals (Range Personalizza
                                 st.session_state["selected_activity_date"] = act_date
                                 st.switch_page("pages/visualizza_mappa.py")
 
-                        # Sezione di modifica del nome attivata
                         if st.session_state[key_edit]:
                             st.markdown("---")
                             col_input_name, col_save_name = st.columns([3, 1])
@@ -410,7 +408,7 @@ with st.expander("🔍 Esplora Archivio Storico da Intervals (Range Personalizza
                                 except Exception as e:
                                     st.error(f"Errore durante il caricamento della mappa: {e}")
 
-# --- 3. CONTENITORE GRAFICI INTERATTIVI E DETTAGLIO USCITE (Sotto menu a discesa con persistenza indipendente) ---
+# --- 3. CONTENITORE GRAFICI INTERATTIVI E DETTAGLIO USCITE ---
 st.markdown("---")
 
 FILE_GRAFICO_INIZIO = "grafico_data_inizio.txt"
@@ -537,7 +535,7 @@ with st.expander("📈 Analisi Grafica e Dettaglio Uscite per Metrica", expanded
             tot_km_periodo = df_filtrato_periodo['Km'].sum()
             tot_d_periodo = df_filtrato_periodo['D+'].sum()
             tot_ore_periodo = df_filtrato_periodo['Ore in sella'].sum()
-            num_uscite_periodo = len(df_filtrato_periodo)
+            num_uscite_periodo = int(len(df_filtrato_periodo))
 
             st.markdown("---")
             
@@ -557,11 +555,12 @@ with st.expander("📈 Analisi Grafica e Dettaglio Uscite per Metrica", expanded
 
             st.markdown(f"#### 📊 {titolo_totali}")
             
-            col_tot1, col_tot2, col_tot3, col_tot4 = st.columns(4)
+            # Utilizziamo 4 colonne con pesi uguali definiti esplicitamente
+            col_tot1, col_tot2, col_tot3, col_tot4 = st.columns([1, 1, 1, 1])
             col_tot1.metric("Km", f"{tot_km_periodo:,.2f} km")
             col_tot2.metric("D+", f"{tot_d_periodo:,.0f} m")
             col_tot3.metric("Ore in sella", f"{timedelta_to_str(tot_ore_periodo * 3600)}")
-            col_tot4.metric("Uscite", f"{num_uscite_periodo}")
+            col_tot4.metric("Uscite", str(num_uscite_periodo))
 
             st.markdown("---")
             
